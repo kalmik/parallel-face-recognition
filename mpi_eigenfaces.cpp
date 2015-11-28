@@ -34,25 +34,6 @@
  int my_rank, p;
  MPI_Comm comm;
 
-
- static Mat norm_0_255(InputArray _src) {
-    Mat src = _src.getMat();
-    // Create and return normalized image:
-    Mat dst;
-    switch(src.channels()) {
-        case 1:
-        cv::normalize(_src, dst, 0, 255, NORM_MINMAX, CV_8UC1);
-        break;
-        case 3:
-        cv::normalize(_src, dst, 0, 255, NORM_MINMAX, CV_8UC3);
-        break;
-        default:
-        src.copyTo(dst);
-        break;
-    }
-    return dst;
-}
-
 static void read_csv(const string& filename, vector<Mat>& images, vector<int>& labels, char separator = ';') {
 
     std::ifstream file(filename.c_str(), ifstream::in);
@@ -118,7 +99,7 @@ int main(int argc, char *argv[]) {
     // Check for valid command line arguments, print usage
     // if no arguments were given.
     if (argc < 2) {
-        cout << "usage: " << argv[0] << " <csv.ext> [output_folder]" << endl;
+        cout << "usage: " << argv[0] << " <csv.ext> <input image>" << endl;
         exit(1);
     }
     
@@ -131,15 +112,13 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(comm, &p);
     MPI_Comm_rank(comm, &my_rank);
 
-    string output_folder = ".";
-    if (argc == 3) {
-        output_folder = string(argv[2]);
-    }
     // Get the path to your CSV.
     string fn_csv = string(argv[1]);
+
     // These vectors hold the images and corresponding labels.
     vector<Mat> images;
     vector<int> labels;
+
     // Read in the data. This can fail if no valid
     // input filename is given.
     try {
@@ -149,40 +128,45 @@ int main(int argc, char *argv[]) {
         // nothing more we can do
         exit(1);
     }
+
     // Quit if there are not enough images for this demo.
     if(images.size() <= 1) {
         string error_message = "This demo needs at least 2 images to work. Please add more images to your data set!";
         CV_Error(CV_StsError, error_message);
     }
-    // Get the height from the first image. We'll need this
-    // later in code to reshape the images to their original
-    // size:
+
     int height = images[0].rows;
-    // The following lines simply get the last images from
-    // your dataset and remove it from the vector. This is
-    // done, so that the training data (which we learn the
-    // cv::FaceRecognizer on) and the test data we test
-    // the model with, do not overlap.
+
     Mat testSample;
-    int position = 0, rows, cols, i, j;
+    int position, rows, cols, i, j;
     double start, finish, elapsed, local_elapsed;
 
     char inputbuf[MAX_IMAGE];
     unsigned char *inputdata;
+    int predictedLabel;
+
+    int predictImage;
+    double local_confidence = 0.0;
+    double confidence = 0.0;
+    
+    position = 0;
+    MPI_Barrier(comm);
 
     start = MPI_Wtime();
 
+    //reading desired image
+
     if(my_rank == 0) {
-        // Mat testSample = images[images.size() - 1];
-        // int testLabel = labels[labels.size() - 1];
-        // images.pop_back();
-        // labels.pop_back();
-        testSample = imread(argv[3], 0);
+
+        //packing desired image
+        testSample = imread(argv[2], 0);
         MPI_Pack(&testSample.rows, 1, MPI_INT, &inputbuf, MAX_IMAGE, &position, comm);
         MPI_Pack(&testSample.cols, 1, MPI_INT, &inputbuf, MAX_IMAGE, &position, comm);
         MPI_Pack(testSample.data, testSample.rows*testSample.cols, MPI_CHAR, &inputbuf, MAX_IMAGE, &position, comm);
-
+        
+        //broad cast
         MPI_Bcast(&inputbuf, MAX_IMAGE, MPI_PACKED, 0, comm );
+
     } else {
         MPI_Bcast(&inputbuf, MAX_IMAGE, MPI_PACKED, 0, comm );
 
@@ -200,19 +184,15 @@ int main(int argc, char *argv[]) {
     Ptr<FaceRecognizer> model = createEigenFaceRecognizer();
     model->train(images, labels);
 
-    int predictedLabel = model->predict(testSample);
-    int predictImage;
-    double local_confidence = 0.0;
-    double confidence = 0.0;
+    predictedLabel = model->predict(testSample);
+
     model->predict(testSample, predictedLabel, local_confidence);
 
-    //TODO Create operation type and redude;
-
+    //Getting the minimum confidence value for all cores.
     MPI_Allreduce(&local_confidence, &confidence, 1, MPI_DOUBLE, MPI_MIN, comm);
 
-    if(local_confidence == confidence && my_rank == 0){
+    if(local_confidence == confidence && my_rank == 0){ //core 0 has found face
         predictImage = predictedLabel;
-        
     }
 
     if(local_confidence == confidence && my_rank != 0) {
@@ -228,12 +208,21 @@ int main(int argc, char *argv[]) {
     local_elapsed = finish - start;
 
     MPI_Reduce(&local_elapsed, &elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
+    free(inputdata);
 
-    IplImage* n[10];
+    //display results
     if(my_rank == 0) {
-        string result_message = format("Predicted class = %d  / confidence %f", predictImage, confidence);
-        cout << result_message << endl << elapsed << endl;
 
+        #ifndef SHOW_ONLY_TIME
+        cout << "Cores " << p << endl;
+        string result_message = format("Predicted class = %d  / confidence %f", predictImage, confidence);
+        cout << result_message << endl << "Elapsed time " << elapsed << endl;
+        #else
+        cout << elapsed << endl;
+        #endif
+
+        #ifdef DISPLAY
+        IplImage* n[10];
         imshow("Desired", testSample);
 
         IplImage* dst=cvCreateImage(cvSize(5*images[0].cols,2*images[0].rows),IPL_DEPTH_8U,3);
@@ -249,6 +238,7 @@ int main(int argc, char *argv[]) {
         cvShowImage( "DataBase", dst );
         
         waitKey(0);
+        #endif
     }
 
     MPI_Finalize();
