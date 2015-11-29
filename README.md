@@ -28,3 +28,6 @@ sh test.sh <ngroups> <ntests per core>
 ```
 
 ###Results
+![Speed UP](https://raw.githubusercontent.com/kalmik/parallel-face-recogniton/master/benchmarks/speedup.png)
+
+![Efficiency](https://raw.githubusercontent.com/kalmik/parallel-face-recogniton/master/benchmarks/efficiency.png)
