@@ -12,7 +12,7 @@ g++ mpi_eigenfaces.cpp -o faces `pkg-config --libs opencv` -lmpi -g
 ####Options
 ```
 -DDISPLAY display result image
--DSHOW_ONLY_TIME print only Wall time to runs test suits
+-DSHOW_ONLY_TIME print only Wall time to run test suites
 ```
 
 ####Execute
@@ -22,7 +22,7 @@ mpiexec -n <ncores> ./faces <scv> <test image>
 ```
 
 ####Test
-Test suit.
+Test suite.
 ```
 sh test.sh <ngroups> <ntests per core>
 ```
