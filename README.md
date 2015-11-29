@@ -1,16 +1,30 @@
 # parallel-face-recogniton
 A parallel implementation of face recogniton based on opencv eigenfaces algorithm
 
-how to run
+####How to run
 
 install opencv libraries and run the command below.
 
 ```
-g++ `pkg-config --cflags --libs opencv` mpi_eigenfaces.cpp -o faces `pkg-config --libs opencv` -lmpi -g
+g++ mpi_eigenfaces.cpp -o faces `pkg-config --libs opencv` -lmpi -g
 ```
 
-execute
+####Options
+```
+-DDISPLAY display result image
+-DSHOW_ONLY_TIME print only Wall time to runs test suits
+```
+
+####Execute
 
 ```
-mpiexec -n 4 ./faces csv.ext out database/s4/2.pgm
+mpiexec -n <ncores> ./faces <scv> <test image>
 ```
+
+####Test
+Test suit.
+```
+sh test.sh <ngroups> <ntests per core>
+```
+
+###Results
