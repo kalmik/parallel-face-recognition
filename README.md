@@ -1,4 +1,4 @@
-# parallel-face-recogniton
+# parallel-face-recognition
 A parallel implementation of face recogniton based on opencv eigenfaces algorithm
 
 ####How to run
