@@ -156,6 +156,8 @@ int main(int argc, char *argv[]) {
 
     start = MPI_Wtime();
 
+    char path[18];
+
     for(int i = 0; i < faces.size(); i++) {
         position = 0;
 
@@ -163,7 +165,7 @@ int main(int argc, char *argv[]) {
 
             //packing desired image
             testSample = frame_gray(faces[i]);
-            // testSample = imread("database/s1/1.pgm", 0);
+            // testSample = imread(format("database/s%d/1.pgm", i%40 + 1), 0);
             resize(testSample, testSample, Size(92, 112));
 
             imshow("test", testSample);
