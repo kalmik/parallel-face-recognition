@@ -19,8 +19,6 @@ CascadeClassifier face_cascade;
 std::vector<Rect> detectFaces( Mat frame_gray ) {
     std::vector<Rect> faces;
 
-    equalizeHist( frame_gray, frame_gray );
-
     //-- Detect faces
     face_cascade.detectMultiScale( frame_gray, faces, 1.1, 2, 0|CASCADE_SCALE_IMAGE );
     
@@ -151,7 +149,7 @@ int main(int argc, char *argv[]) {
 
     MPI_Barrier(comm);
 
-    Ptr<FaceRecognizer> model = createEigenFaceRecognizer();
+    Ptr<FaceRecognizer> model = createLBPHFaceRecognizer();
     model->train(images, labels);
 
     start = MPI_Wtime();
@@ -160,16 +158,11 @@ int main(int argc, char *argv[]) {
 
     for(int i = 0; i < faces.size(); i++) {
         position = 0;
-
+        
         if(my_rank == 0) {
 
-            //packing desired image
             testSample = frame_gray(faces[i]);
-            // testSample = imread(format("database/s%d/1.pgm", i%40 + 1), 0);
-            resize(testSample, testSample, Size(92, 112));
-
-            imshow("test", testSample);
-            waitKey();
+            // testSample = imread("database/s1/1.pgm", 0);
 
             MPI_Pack(&testSample.rows, 1, MPI_INT, &inputbuf, MAX_IMAGE, &position, comm);
             MPI_Pack(&testSample.cols, 1, MPI_INT, &inputbuf, MAX_IMAGE, &position, comm);
@@ -194,7 +187,7 @@ int main(int argc, char *argv[]) {
         predictedLabel = model->predict(testSample);
 
         model->predict(testSample, predictedLabel, local_confidence);
-
+        MPI_Barrier(comm);
         //Getting the minimum confidence value for all cores.
         MPI_Allreduce(&local_confidence, &confidence, 1, MPI_DOUBLE, MPI_MIN, comm);
 
@@ -210,18 +203,29 @@ int main(int argc, char *argv[]) {
             
         }
 
-        finish = MPI_Wtime();
-
-        local_elapsed = finish - start;
-
-        MPI_Reduce(&local_elapsed, &elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
+        
         free(inputdata);
 
         //display results
         if(my_rank == 0) {
-            printf("Predicted class = %d  / confidence %f\n", predictImage, confidence);
+            Point center( faces[i].x + faces[i].width/2, faces[i].y + faces[i].height/2 );
+            printf("confidence %f \t Id %i\n", confidence, predictImage);
+            if(confidence < 120){
+                rectangle( frame, faces[i], Scalar( 0, 0, 255), 2);
+            } else {
+                rectangle( frame, faces[i], Scalar( 0, 255, 0), 2);
+            }
         }
 
+    }
+
+    finish = MPI_Wtime();
+    local_elapsed = finish - start;
+    MPI_Reduce(&local_elapsed, &elapsed, 1, MPI_DOUBLE, MPI_MAX, 0, comm);
+    
+    if(my_rank == 0) {
+        printf("Elapsed time %f\n", elapsed);
+        imwrite("final.jpg", frame);
     }
 
     MPI_Finalize();
